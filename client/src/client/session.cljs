@@ -13,7 +13,7 @@
                 "friendly" "calm" "dazzling" "robust"]
    :colours    ["black" "white" "red" "green" "blue" "turquoise" "magenta" "yellow"
                 "pink" "purple" "brown" "grey" "golden" "silver"
-                "stripey" "spotty" ""]
+                "stripey" "spotty"]
    :nouns      ["bunnies" "lions" "bears" "penguins" "snakes" "eagles" "hedgehogs" "owls" "pussy cats" "rats" "mice"
                 "monkeys" "humans" "robins" "weevils" "chickens" "peacocks" "velociraptors" "octopuses" "hippos"
                 "rhinos" "hyenas" "moles" "bats" "bananas"]})

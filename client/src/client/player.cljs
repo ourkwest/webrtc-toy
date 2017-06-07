@@ -2,6 +2,7 @@
   (:require [reagent.core :as reagent :refer [atom]]
             [client.webrtc :as webrtc]
             [client.session :as session]
+            [client.server :as server]
             [clojure.string :as string]))
 
 (enable-console-print!)
@@ -12,36 +13,24 @@
 
 
 (defn post-offer [session-id offer cb]
+  (println "POSTING OFFER")
+  (server/http-post
+    "http://localhost:3210/offer"
+    (str (session/remove-spaces session-id) "|" offer)
+    cb))
 
-  (let [xhr (js/XMLHttpRequest.)]
 
-    (.open xhr "POST" "http://localhost:3210/offer", true)
-    ;(.setRequestHeader xhr "" "")
-    (aset xhr "onload" (fn []
-                         (println ">>" (.-responseText xhr))
-                         (cb (.-responseText xhr))))
-    (.send xhr (str (session/remove-spaces session-id) "|" offer))
-
-    )
-
-  ;var xhr = new XMLHttpRequest();
-  ;xhr.open('POST', 'somewhere', true);
-  ;xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-  ;xhr.onload = function () {
-  ;                          // do something to response
-  ;                             console.log(this.responseText);
-  ;                          };
-  ;xhr.send('user=person&pwd=password&organization=place&requiredkey=key');
-
-  )
-
+(defn receive-msg [& stuff]
+  (println "RECEIVED: " stuff))
 
 (defn join-room []
+
+  (println "join-room")
 
   (let [session-id (->> (range 0 4)
                         (map #(.-value (.getElementById js/document (str "room-key-" %))))
                         (string/join " "))
-        channel (webrtc/offering-channel println nil)]
+        channel (webrtc/offering-channel receive-msg nil)]
 
     (swap! state assoc :phase :joining)
 
@@ -50,8 +39,12 @@
                            ;; post offer AND session id
                            ;; get answer as response
 
+                           (println "make-offer/cb" session-id offer)
+
                            (post-offer session-id offer
                                        (fn [answer]
+
+                                         (println "make-offer/cb/post-offer/cb" session-id answer)
 
                                          (webrtc/accept-answer channel answer))
 

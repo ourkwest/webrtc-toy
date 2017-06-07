@@ -1,15 +1,16 @@
 (ns client.map
   (:require [reagent.core :as reagent :refer [atom]]
             [client.webrtc :as webrtc]
-            [client.session :as session]))
+            [client.session :as session]
+            [client.server :as server]))
 
 (enable-console-print!)
 
 (println "MAP MAP MAP ")
 
 (defonce state (atom {:phase             :startup
-                          :session-id    ""
-                          :data-channels []}))
+                      :session-id    ""
+                      :data-channels []}))
 
 
 (defn setup-webrtc []
@@ -66,28 +67,33 @@
   ;                                    document.getElementById("result").innerHTML += event.data + "<br>";
   ;                                    };
 
-  (println "initialising")
+  ;(println "initialising")
 
   (let [session-id (session/random-session-id)
         sse-url (str "http://localhost:3210/session?session-id=" (session/remove-spaces session-id))
         source (js/EventSource. sse-url)]
 
-    (println session-id)
+    ;(println session-id)
     (swap! state assoc :session-id session-id)
 
     (aset source "onmessage" (fn [event]
-                               (let [[player-id offer] (re-find #"([^|]+)\|(.*)" (.-data event))]
-                                 (println "SSE:" player-id offer)
+                               (let [[_ player-id offer] (re-find #"([^|]+)\|(.*)" (.-data event))]
+                                 (println "source/onmessage" player-id offer)
                                  (webrtc/offer->answer
                                    offer
                                    (fn [answer]
-                                     ; post to server
-                                     )
+                                     (println "source/onmessage/answer-cb" answer)
+                                     (server/http-post
+                                       "http://localhost:3210/answer"
+                                       (str (session/remove-spaces session-id) "|" player-id "|" answer)
+                                       println))
                                    (fn [data]
                                      ; recieve
+                                     (println "RECEIVED:" data)
                                      )
                                    (fn [channel]
                                      ; send
+                                     (webrtc/send channel "Hello?")
                                      )
                                    nil)
                                  ))))

@@ -16,8 +16,12 @@
     ["/favicon.ico" (yada/handler (io/resource "public/favicon.ico"))]
     ["/test" (yada/handler
                (yada/resource
-                 {:methods {:get {:produces "test/plain"
-                                  :response "Hello"}}}))]
+                 {:methods {:get {:produces "text/plain"
+                                  :response (fn [{:keys [response]}]
+
+                                              (assoc response :status 201
+                                                              :body "created")
+                                              )}}}))]
 
     ; map creates session
     ["/session" (yada/handler
@@ -34,7 +38,7 @@
                                           (println "/session" session-id)
                                           (future
                                             (swap! sessions assoc session-id {:to-map to-map})
-                                            (async/>!! to-map "open...")
+                                            ;(async/>!! to-map "open...")
                                             ;(async/close! to-map)
                                             )
                                           to-map))}}}))]
@@ -50,10 +54,9 @@
            {:consumes
             "text/plain"
             :response
-            (fn [ctx]
+            (fn [{:keys [response body]}]
 
-              (let [body (:body ctx)
-                    split (.indexOf body "|")
+              (let [split (.indexOf body "|")
                     session-id (subs body 0 split)
                     offer (subs body (inc split))]
 
@@ -61,29 +64,26 @@
 
                 (if-let [to-map (get-in @sessions [session-id :to-map])]
 
-                  (let [player-id (UUID/randomUUID)
+                  (let [player-id (str (UUID/randomUUID))
                         to-player (async/chan)]
 
-                    (println "about to send offer to map")
+                    (println "about to send offer to map:" (str player-id "|" offer))
                     (async/>!! to-map (str player-id "|" offer))
                     (println "sent offer to map")
                     (swap! sessions assoc-in [session-id player-id] to-player)
 
-                    (if-let [answer (async/alts!! [to-player (async/timeout 5000)])]
-                      (do (println "ANSWER: " answer)
-                          (async/close! to-player)
-                          {:status 200
-                           :body answer})
-                      (do (println "no answer")
-                          {:status 504
-                           :body   "Gateway Timeout"}))
-
-                    {:status 200
-                     :body   "okay"}
-                    )
-
-                  {:status 404
-                   :body   "Room not found."})))}}
+                    (let [taken (async/alts!! [to-player (async/timeout 15000)])]
+                      (println "TAKEN:" taken)
+                      (if-let [answer (first taken)]
+                        (do (println "ANSWER: " answer)
+                            (async/close! to-player)
+                            (assoc response :status 200
+                                            :body answer))
+                        (do (println "no answer")
+                            (assoc response :status 504
+                                            :body "Gateway Timeout")))))
+                  (assoc response :status 404
+                                  :body "Room not found."))))}}
           ; params: offer
           ; generate player-id
           ; add player channel to sessions/session-id/player-id
@@ -104,15 +104,18 @@
           {:post {:consumes
                   "text/plain"
                   :response
-                  (fn [ctx]
-                    (println "/answer" (:body ctx))
-                    (let [[_ session-id player-id answer] (re-find #"([^|]+)\|([^|]+)\|(.*)" (:body ctx))]
+                  (fn [{:keys [response body]}]
+                    (println "/answer" body)
+                    (let [[_ session-id player-id answer] (re-find #"([^|]+)\|([^|]+)\|(.*)" body)]
                       (if-let [to-player (get-in @sessions [session-id player-id])]
-                        (do (async/>!! to-player answer)
-                            {:status 200
-                             :body "okay"})
-                        {:status 404
-                         :body   "Room/player not found."})))}}}))]]])
+                        (do (println "Player found in session... answering...")
+                            (async/>!! to-player answer)
+                            (assoc response :status 200
+                                            :body "okay"))
+                        (do
+                          (println "Player missing from session!")
+                          (assoc response :status 404
+                                          :body "Room/player not found.")))))}}}))]]])
 
 (defrecord Routes [env]
   c/Lifecycle
