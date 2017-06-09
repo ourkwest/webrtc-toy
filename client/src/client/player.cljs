@@ -9,7 +9,9 @@
 
 (println "player ...")
 
-(defonce state (atom {:phase :init}))
+(defonce state (atom {:phase :init
+                      :channel nil
+                      :msgs []}))
 
 
 (defn post-offer [session-id offer cb]
@@ -20,8 +22,9 @@
     cb))
 
 
-(defn receive-msg [& stuff]
-  (println "RECEIVED: " stuff))
+(defn receive-msg [event]
+  (swap! state update :msgs conj (.-data event))
+  (println "RECEIVED: " (.-data event)))
 
 (defn join-room []
 
@@ -33,6 +36,7 @@
         channel (webrtc/offering-channel receive-msg nil)]
 
     (swap! state assoc :phase :joining)
+    (swap! state assoc :channel channel)
 
       (webrtc/make-offer channel
                          (fn [offer]
@@ -46,7 +50,10 @@
 
                                          (println "make-offer/cb/post-offer/cb" session-id answer)
 
-                                         (webrtc/accept-answer channel answer))
+                                         (webrtc/accept-answer channel answer)
+                                         (swap! state assoc :phase :joined) ;TODO, this in promise on accept answer
+
+                                         )
 
                                           ))
 
@@ -75,6 +82,21 @@
 (defn render-waiting []
   [:span "Please wait..."])
 
+(defn send [msg]
+  (-> @state :channel (webrtc/send msg)))
+
+(defn render-joined []
+  [:div
+
+   [:div
+    (for [[index msg] (map-indexed vector (:msgs @state))]
+      [:div {:key (str "msg-" index)} msg])]
+
+   [:input {:type "button" :value "Up" :on-click #(send "Up")}]
+   [:input {:type "button" :value "Down" :on-click #(send "Down")}]
+
+   ])
+
 (defn render-app []
 
   [:div
@@ -82,7 +104,8 @@
 
      (condp = phase
        :init [render-init]
-       :joining [render-waiting]))])
+       :joining [render-waiting]
+       :joined [render-joined]))])
 
 
 (defn initialise [container]

@@ -75,6 +75,8 @@
 
     (.createAnswer pc (fn [description]
                         (success event-handler "peer connection : create answer")
+                        ;TODO: use promises, as callbacks are deprecated?
+                        ; https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/setLocalDescription
                         (.setLocalDescription pc description
                                               #(success event-handler "peer connection : set local description")
                                               #(failure event-handler "peer connection : set local description")))
