@@ -98,8 +98,7 @@
 
     (aset source "onmessage"
           (fn [event]
-
-            (when (not= "<TEST>" (.-data event))
+            (when (not= "<PING>" (.-data event))
               (let [[_ player-id offer] (re-find #"([^|]+)\|(.*)" (.-data event))
                     c (async/chan)]
                 (println "source/onmessage" player-id offer)
@@ -113,14 +112,10 @@
                       println))
                   (fn [event]
                     (println "RECEIVED:" (.-data event))
-                    (swap! state update-in [:players player-id :in] conjv (.-data event))
-                    )
+                    (swap! state update-in [:players player-id :in] conjv (.-data event)))
                   (fn [channel]
-
                     (swap! state assoc-in [:players player-id :out] (fn [outbound-message]
-                                                                      (webrtc/send channel outbound-message)))
-
-                    )
+                                                                      (webrtc/send channel outbound-message))))
                   nil)
                 )))))
 
