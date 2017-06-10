@@ -84,75 +84,44 @@
   )
 
 
-(defn receive [data]
-
-  (when (> 5 (-> @state :msgs count))
-    (-> @state :data-channels (webrtc/send "Hi from map!!!!")))
-
-  )
-
 (def conjv (fnil conj []))
 
 (defn initialise [container]
 
   (reagent/render-component [render-app] container)
 
-  ;(setup-webrtc)
-
-
-  ;var source = new EventSource("demo_sse.php");
-  ;source.onmessage = function(event) {
-  ;                                    document.getElementById("result").innerHTML += event.data + "<br>";
-  ;                                    };
-
-  ;(println "initialising")
-
   (let [session-id (session/random-session-id)
         sse-url (str "http://localhost:3210/session?session-id=" (session/remove-spaces session-id))
         source (js/EventSource. sse-url)]
 
-    ;(println session-id)
     (swap! state assoc :session-id session-id)
 
     (aset source "onmessage"
           (fn [event]
-            (let [[_ player-id offer] (re-find #"([^|]+)\|(.*)" (.-data event))
-                  c (async/chan)]
-              (println "source/onmessage" player-id offer)
-              (webrtc/offer->answer
-                offer
-                (fn [answer]
-                  (println "source/onmessage/answer-cb" answer)
-                  (server/http-post
-                    "http://localhost:3210/answer"
-                    (str (session/remove-spaces session-id) "|" player-id "|" answer)
-                    println))
-                (fn [event]
-                  (println "RECEIVED:" (.-data event))
-                  (swap! state update-in [:players player-id :in] conjv (.-data event))
-                  )
-                (fn [channel]
 
-                  (swap! state assoc-in [:players player-id :out] (fn [outbound-message]
-                                                                    (webrtc/send channel outbound-message)))
+            (when (not= "<TEST>" (.-data event))
+              (let [[_ player-id offer] (re-find #"([^|]+)\|(.*)" (.-data event))
+                    c (async/chan)]
+                (println "source/onmessage" player-id offer)
+                (webrtc/offer->answer
+                  offer
+                  (fn [answer]
+                    (println "source/onmessage/answer-cb" answer)
+                    (server/http-post
+                      "http://localhost:3210/answer"
+                      (str (session/remove-spaces session-id) "|" player-id "|" answer)
+                      println))
+                  (fn [event]
+                    (println "RECEIVED:" (.-data event))
+                    (swap! state update-in [:players player-id :in] conjv (.-data event))
+                    )
+                  (fn [channel]
 
-                  )
-                nil)
-              ))))
+                    (swap! state assoc-in [:players player-id :out] (fn [outbound-message]
+                                                                      (webrtc/send channel outbound-message)))
 
-  ; get session from server
-  ; wait for SSE session id
-  ; wait for SSE offers
-  ; on offer
-  ;(webrtc/offer->answer offer
-  ;                      (fn [answer]
-  ;                        ; immediately post session id and answer to server
-  ;                        )
-  ;                      (fn [data]
-  ;                        (println data))
-  ;                      (fn [channel]
-  ;                        (println "got channel"))
-  ;                      nil)
-
+                    )
+                  nil)
+                )))))
 
   )

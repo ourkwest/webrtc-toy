@@ -2,6 +2,8 @@
   (:require [com.stuartsierra.component :as c]
             [server.log :as log]
             [yada.yada :as yada]
+            [manifold.stream :as s]
+            [manifold.deferred :as d]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
             [clojure.string :as string])
@@ -23,25 +25,63 @@
                                                               :body "created")
                                               )}}}))]
 
+
+    ;      humans          map (client)          player (client)          server
+    ;        |                 |                        |                   |
+    ;        |---------------->|                        |                   |
+    ;        |----------------------------------------->|                   |
+    ;        |                 |                        |                   |
+    ;        |            GET session id ---------------------------------->|
+    ;        |                 |<-------------------------------------- SSE: begin
+    ;        |                 |                        |                   |
+    ;        |<------- display session id               |                   |
+    ; enter session id -------------------------------->|                   |
+    ;        |                 |                 POST session id            |
+    ;        |                 |                 & WebRTC Offer ----------->|
+    ;        |                 |<--------------------------------- SSE: send WebRTC Offer
+    ;        |         POST WebRTC Answer---------------------------------->|
+    ;        |                 |                        |<------- Respond WebRTC Answer
+    ;        |                 |                        |                   |
+    ;        |                 |<---- WebRTC Magic ---->|                   |
+    ;        |                 |                        |                   |
+    ;        |                 |                        |               SSE: end?
+    ;        |                 |                        |                   |
+
     ; map creates session
     ["/session" (yada/handler
                   (yada/resource
                     {:access-control
                      {:allow-origin "*"}
                      :methods
-                     {:get {:produces "text/event-stream"
+                     {:get {:produces   "text/event-stream"
                             :parameters {:query {:session-id String}}
-                            :response (fn [ctx]
-                                        (let [to-map (async/chan)
-                                              session-id (-> ctx :parameters :query :session-id)]
+                            :response   (fn [ctx]
 
-                                          (println "/session" session-id)
-                                          (future
+                                          (let [to-map (s/stream)
+                                                session-id (-> ctx :parameters :query :session-id)]
+                                            (println "CREATED SESSION: " session-id)
+
                                             (swap! sessions assoc session-id {:to-map to-map})
-                                            ;(async/>!! to-map "open...")
-                                            ;(async/close! to-map)
-                                            )
-                                          to-map))}}}))]
+
+                                            (s/connect (s/periodically 60000 (fn [] "<TEST>")) to-map)
+
+                                            (s/on-closed to-map
+                                                         #(do
+                                                            (swap! sessions dissoc session-id)
+                                                            (println "CLOSED SESSION: " session-id)))
+
+                                            to-map)
+
+                                          ;(let [to-map (async/chan)
+                                          ;      session-id (-> ctx :parameters :query :session-id)]
+                                          ;  (println "/session" session-id)
+                                          ;  (swap! sessions assoc session-id {:to-map to-map})
+                                          ;
+                                          ;  ; asynchronously send test messages down the channel,
+                                          ;  ; if they block, kill the session.
+                                          ;
+                                          ;  to-map)
+                                          )}}}))]
 
     ; player asks to join
     ["/offer"
@@ -65,23 +105,36 @@
                 (if-let [to-map (get-in @sessions [session-id :to-map])]
 
                   (let [player-id (str (UUID/randomUUID))
-                        to-player (async/chan)]
+                        to-player (s/stream)]
 
-                    (println "about to send offer to map:" (str player-id "|" offer))
-                    (async/>!! to-map (str player-id "|" offer))
-                    (println "sent offer to map")
                     (swap! sessions assoc-in [session-id player-id] to-player)
 
-                    (let [taken (async/alts!! [to-player (async/timeout 15000)])]
-                      (println "TAKEN:" taken)
-                      (if-let [answer (first taken)]
-                        (do (println "ANSWER: " answer)
-                            (async/close! to-player)
-                            (assoc response :status 200
-                                            :body answer))
-                        (do (println "no answer")
-                            (assoc response :status 504
-                                            :body "Gateway Timeout")))))
+                    (println "about to send offer to map:" (str player-id "|" offer))
+                    ;(async/>!! to-map (str player-id "|" offer))
+                    (s/put! to-map (str "data: " player-id "|" offer"\n\n"))
+                    (println "sent offer to map")
+
+                    @(d/chain (s/try-take! to-player 15000)
+                              #(if-let [answer %]
+                                 (do (println "ANSWER: " answer)
+                                     (s/close! to-player)
+                                     (assoc response :status 200
+                                                     :body answer))
+                                 (do (println "no answer")
+                                     (assoc response :status 504
+                                                     :body "Gateway Timeout"))))
+
+                    ;(let [taken (async/alts!! [to-player (async/timeout 15000)])]
+                    ;  (println "TAKEN:" taken)
+                    ;  (if-let [answer (first taken)]
+                    ;    (do (println "ANSWER: " answer)
+                    ;        (async/close! to-player)
+                    ;        (assoc response :status 200
+                    ;                        :body answer))
+                    ;    (do (println "no answer")
+                    ;        (assoc response :status 504
+                    ;                        :body "Gateway Timeout"))))
+                    )
                   (assoc response :status 404
                                   :body "Room not found."))))}}
           ; params: offer
@@ -109,7 +162,7 @@
                     (let [[_ session-id player-id answer] (re-find #"([^|]+)\|([^|]+)\|(.*)" body)]
                       (if-let [to-player (get-in @sessions [session-id player-id])]
                         (do (println "Player found in session... answering...")
-                            (async/>!! to-player answer)
+                            (s/put! to-player answer)
                             (assoc response :status 200
                                             :body "okay"))
                         (do
