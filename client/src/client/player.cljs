@@ -3,6 +3,7 @@
             [client.webrtc :as webrtc]
             [client.session :as session]
             [client.server :as server]
+            [client.config :as config]
             [clojure.string :as string]))
 
 (enable-console-print!)
@@ -10,6 +11,7 @@
 (println "player ...")
 
 (defonce state (atom {:phase :init
+                      :name ""
                       :channel nil
                       :msgs []}))
 
@@ -17,7 +19,7 @@
 (defn post-offer [session-id offer cb]
   (println "POSTING OFFER")
   (server/http-post
-    "http://localhost:3210/offer"
+    (str (:server config/config) "/offer")
     (str (session/remove-spaces session-id) "|" offer)
     cb))
 
@@ -30,10 +32,19 @@
 
   (println "join-room")
 
-  (let [session-id (->> (range 0 4)
-                        (map #(.-value (.getElementById js/document (str "room-key-" %))))
-                        (string/join " "))
-        channel (webrtc/offering-channel receive-msg nil)]
+  (let [session-id (if (config/test?)
+                     (session/schelling-session-id)
+                     (->> (range 0 4)
+                          (map #(.-value (.getElementById js/document (str "room-key-" %))))
+                          (string/join " ")))
+        channel (webrtc/offering-channel)]
+
+    (webrtc/on-message channel receive-msg)
+    (webrtc/on-open channel
+                    #(->> @state
+                          :name
+                          (str "HELLO:")
+                          (webrtc/send channel)))
 
     (swap! state assoc :phase :joining)
     (swap! state assoc :channel channel)
@@ -52,14 +63,8 @@
 
                                          (webrtc/accept-answer channel answer)
                                          (swap! state assoc :phase :joined) ;TODO, this in promise on accept answer
-
-                                         )
-
-                                          ))
-
-
+                                         )))
                          nil)
-
     ))
 
 
@@ -67,6 +72,8 @@
   [:div
    [:h1 "player"]
    [:div
+    [:span "Enter your name: " [:input {:type      "text"
+                                        :on-change #(swap! state assoc :name (.-value (.-target %)))}]]
     [:div "Choose a room: "]
     [:div
      (for [[k words] (map-indexed vector session/options)]
@@ -82,8 +89,8 @@
 (defn render-waiting []
   [:span "Please wait..."])
 
-(defn send [msg]
-  (-> @state :channel (webrtc/send msg)))
+(defn send [msg-type msg]
+  (-> @state :channel (webrtc/send (str msg-type ":" msg))))
 
 (defn render-joined []
   [:div
@@ -92,16 +99,14 @@
     (for [[index msg] (map-indexed vector (:msgs @state))]
       [:div {:key (str "msg-" index)} msg])]
 
-   [:input {:type "button" :value "Up" :on-click #(send "Up")}]
-   [:input {:type "button" :value "Down" :on-click #(send "Down")}]
+   [:input {:type "button" :value "Up" :on-click #(send "MOVE" "Up")}]
+   [:input {:type "button" :value "Down" :on-click #(send "MOVE" "Down")}]
 
    ])
 
 (defn render-app []
-
   [:div
    (let [{:keys [phase]} @state]
-
      (condp = phase
        :init [render-init]
        :joining [render-waiting]
@@ -109,17 +114,4 @@
 
 
 (defn initialise [container]
-
-  (reagent/render-component [render-app] container)
-
-
-
-  ; TODO: this when the session id is known!
-  ;(let [channel (webrtc/offering-channel println nil)]
-  ;  (webrtc/make-offer channel
-  ;                     (fn [offer]
-  ;                       ;; post offer AND session id
-  ;                       ;; get answer as response
-  ;                       (webrtc/accept-answer channel answer))
-  ;                     nil))
-  )
+  (reagent/render-component [render-app] container))

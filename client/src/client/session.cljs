@@ -3,20 +3,22 @@
 
 
 (def words
+  ;TODO: one per letter of the alphabet (per group)?
   {:quantities ["not any"
-                "two" "three" "three and a half" "four" "five" "six" "seven" "eight" "nine" "ten" "eleven" "twelve"
-                "fourty two" "a hundred" "a thousand" "a million" "lots of"]
+                "two" "three" "three and a half" "four" "five" "six" "seven" "eight" "nine" "ten" "eleven" "a dozen"
+                "fourty two" "a hundred" "a thousand" "a million" "lots of" "nine and three quarters"
+                "six hundred and sixty six" "thirteen" "eighteen" "thirty two" "all the" "infinite" "seventy"]
    :qualities  ["soft" "hard" "fluffy" "squishy" "shiny" "bouncy" "rubbery" "elastic" "chaotic" "melancholy"
                 "benevolent" "peaceful" "delightful" "meditating" "malingering" "hungry" "rabid" "memorable" "brave"
                 "happy" "lucid" "bouyant" "spinning" "dizzy" "flirtatious" "glamourous" "dangerous" "quantum"
                 "electric" "mechanical" "robotic" "pedantic" "annoying" "moronic" "gleeful" "tame" "wild"
                 "friendly" "calm" "dazzling" "robust"]
-   :colours    ["black" "white" "red" "green" "blue" "turquoise" "magenta" "yellow"
-                "pink" "purple" "brown" "grey" "golden" "silver"
-                "stripey" "spotty"]
-   :nouns      ["bunnies" "lions" "bears" "penguins" "snakes" "eagles" "hedgehogs" "owls" "pussy cats" "rats" "mice"
-                "monkeys" "humans" "robins" "weevils" "chickens" "peacocks" "velociraptors" "octopuses" "hippos"
-                "rhinos" "hyenas" "moles" "bats" "bananas"]})
+   :colours    ["black" "white" "red" "green" "blue"
+                "turquoise" "magenta" "yellow" "violet" "grey" "pink" "purple" "brown" "orange" "golden" "silver"
+                "stripey" "spotty" "tangerine" "beige" "scarlet" "crimson" "lilac" "teal" "magnolia" "peach"]
+   :nouns      ["armadillos" "baboons" "centipedes" "dormice" "elephants" "frogs" "grasshoppers" "humans" "iguanas"
+                "jellyfish" "kangaroos" "lizards" "moles" "newts" "otters" "pussy cats" "quails" "rattlesnakes"
+                "stoats" "turkeys" "umbrellas" "velociraptors" "wombats" "x-ray machines" "yaks" "zebras"]})
 
 (defn remove-spaces [x]
   (string/replace x " " "-"))
@@ -28,6 +30,9 @@
 
 (defn random-session-id []
   (string/join " " (map rand-nth options)))
+
+(defn schelling-session-id []
+  (string/join " " (map first options)))
 
 
 ;(println "Posibilities: " (apply * (map count options)))
